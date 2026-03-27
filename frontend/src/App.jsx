@@ -31,12 +31,12 @@ const PRODUCT_COLORS = [
 
 const SIZES = ['YS', 'YM', 'YL', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
 
-// Print areas per view — used for clipping
+// Print areas per view — used for clipping on the 500x600 logical canvas
 export const PRINT_AREAS = {
-  front: { left: -10, top: 55, width: 300, height: 550 },
-  back: { left: 10, top: 0, width: 400, height: 575 },
-  rightSleeve: { left: -70, top: 60, width: 160, height: 300 },
-  leftSleeve: { left: 175, top: 40, width: 160, height: 300 },
+  front: { left: 130, top: 90, width: 220, height: 400 },
+  back: { left: 130, top: 90, width: 220, height: 400 },
+  rightSleeve: { left: 240, top: 140, width: 100, height: 180 },
+  leftSleeve: { left: 140, top: 140, width: 100, height: 180 },
 };
 
 export function calcPrice(itemCount) {

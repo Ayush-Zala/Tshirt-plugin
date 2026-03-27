@@ -222,11 +222,32 @@ export default function CanvasArea() {
 
   const canvasElRef = useRef(null);
   const overlayRef = useRef(null);
+  const containerRef = useRef(null);
   const isDraggingRef = useRef(false);
   const [initialized, setInitialized] = useState(false);
   const controlsRef = useRef(null);
   // Normalized mouse position (-1 to +1) relative to the canvas wrapper
   const mouseRef = useRef({ x: 0, y: 0 });
+
+  // Add responsive scaling state
+  const [responsiveScale, setResponsiveScale] = useState(1);
+  const BASE_W = 500;
+  const BASE_H = 600;
+
+  // Track responsive container size
+  useEffect(() => {
+    const observer = new ResizeObserver((entries) => {
+      if (entries.length > 0) {
+        const { width, height } = entries[0].contentRect;
+        // Fit the 500x600 base area into available space with 20px padding
+        const scale = Math.min((width - 40) / BASE_W, (height - 40) / BASE_H);
+        setResponsiveScale(Math.max(0.1, scale)); // prevent 0 scale
+      }
+    });
+
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const activeBox = PRINT_AREAS[activeView] || PRINT_AREAS.front;
 
@@ -246,8 +267,8 @@ export default function CanvasArea() {
   useEffect(() => {
     if (canvasElRef.current && !initialized) {
       const canvas = new fabric.Canvas(canvasElRef.current, {
-        width: 340,
-        height: 440,
+        width: BASE_W,
+        height: BASE_H,
         backgroundColor: 'transparent',
       });
 
@@ -290,24 +311,42 @@ export default function CanvasArea() {
   // Calculate CSS clip-path inset dynamically to allow 3D rotation outside the print area
   const padding = 20; // Allow 20px extra for Fabric selection handles
   const insetTop = Math.max(0, activeBox.top - padding);
-  const insetRight = Math.max(0, 340 - (activeBox.left + activeBox.width) - padding);
-  const insetBottom = Math.max(0, 440 - (activeBox.top + activeBox.height) - padding);
+  const insetRight = Math.max(0, BASE_W - (activeBox.left + activeBox.width) - padding);
+  const insetBottom = Math.max(0, BASE_H - (activeBox.top + activeBox.height) - padding);
   const insetLeft = Math.max(0, activeBox.left - padding);
   const cssClipPath = `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`;
 
   return (
     <div
       className="cpd-canvas-area"
-      style={{ position: 'relative' }}
+      ref={containerRef}
+      style={{ 
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      {/* ── 3D Scene: fills entire cpd-canvas-area, never clipped ── */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-        <Canvas
-          shadows
-          camera={{ position: [-2.5, 0.1, 0], fov: 40 }}
-        >
+      <div 
+        style={{
+          position: 'relative',
+          width: BASE_W,
+          height: BASE_H,
+          transform: `scale(${responsiveScale * zoom})`,
+          transformOrigin: 'center center',
+          transition: isDraggingRef.current ? 'none' : 'transform 0.2s ease',
+        }}
+      >
+        {/* ── 3D Scene ── */}
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+          <Canvas
+            shadows
+            camera={{ position: [-2.5, 0.1, 0], fov: 40 }}
+            style={{ pointerEvents: 'auto' }}
+          >
           <ambientLight intensity={0.6} />
 
           <directionalLight
@@ -339,7 +378,7 @@ export default function CanvasArea() {
             ref={controlsRef}
             target={[0.15, 0.3, 0]}
             enablePan={false}
-            enableZoom
+            enableZoom={false} // Native 3D zoom disabled to preserve alignment with 2D bounds
             enableDamping
             onStart={() => { isDraggingRef.current = true; }}
             onEnd={() => { isDraggingRef.current = false; }}
@@ -347,45 +386,45 @@ export default function CanvasArea() {
 
           <ViewRotator view={activeView} controlsRef={controlsRef} overlayRef={overlayRef} isDraggingRef={isDraggingRef} mouseRef={mouseRef} />
         </Canvas>
-      </div>
+        </div>
 
-      {/* ── 2D Design layer: centered 340×440, sits above 3D ── */}
-      <div
-        style={{
-          position: 'relative',
-          width: 340,
-          height: 440,
-          transform: `scale(${zoom})`,
-          zIndex: 10,
-          pointerEvents: 'none', // let 3D orbit capture mouse by default
-        }}
-      >
-        {/* Fabric canvas – pointer events only inside the print area */}
+        {/* ── 2D Design layer ── */}
         <div
-          ref={overlayRef}
           style={{
             position: 'absolute',
             inset: 0,
-            clipPath: cssClipPath,
-            pointerEvents: 'auto',
+            zIndex: 10,
+            pointerEvents: 'none', // let 3D orbit capture mouse by default
           }}
         >
-          <canvas ref={canvasElRef} style={{ background: 'transparent' }} />
-        </div>
+          {/* Fabric canvas – pointer events only inside the print area */}
+          <div
+            ref={overlayRef}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              clipPath: cssClipPath,
+              pointerEvents: 'auto',
+            }}
+          >
+            <canvas ref={canvasElRef} style={{ background: 'transparent' }} />
+          </div>
 
-        {/* Print Area dashed border */}
-        <div
-          style={{
-            position: 'absolute',
-            left: activeBox.left,
-            top: activeBox.top,
-            width: activeBox.width,
-            height: activeBox.height,
-            border: '2px dashed rgba(67,97,238,0.7)',
-            borderRadius: 4,
-            pointerEvents: 'none',
-          }}
-        />
+          {/* Print Area dashed border */}
+          <div
+            style={{
+              position: 'absolute',
+              left: activeBox.left,
+              top: activeBox.top,
+              width: activeBox.width,
+              height: activeBox.height,
+              border: '2px dashed rgba(67,97,238,0.7)',
+              borderRadius: 4,
+              pointerEvents: 'none',
+              boxShadow: '0 0 0 9999px rgba(255,255,255,0.05)', // Dim area outside the box slightly (optional)
+            }}
+          />
+        </div>
       </div>
     </div>
   );
